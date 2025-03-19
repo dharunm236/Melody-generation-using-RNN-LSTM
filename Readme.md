@@ -38,5 +38,4 @@ The melody will be generated using a predefined seed embedded in the code.
 - You can either use the provided `model.h5` or generate your own by training.
 - The melody generation process depends on the pre-trained model and the initial seed.
 
-## License
-This project is licensed under the MIT License.
+
