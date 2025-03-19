@@ -1,7 +1,7 @@
 # Melody Generator
 
 ## Overview
-This project is a melody generation system using deep learning. It processes musical data, trains a model, and generates melodies based on a predefined seed. {Forked from github.com/musikalkemist/generating-melodies-with-rnn-lstm.git}
+This project is a melody generation system using deep learning. It processes musical data, trains a model, and generates melodies based on a predefined seed. {Forked from https://github.com/musikalkemist/generating-melodies-with-rnn-lstm}
 
 
 ## Setup
