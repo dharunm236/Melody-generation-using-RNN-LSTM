@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Melody Generator</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css">
+    
+    <!-- Import TensorFlow.js first -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.0.0/dist/tf.min.js"></script>
+    
+    <!-- Import Magenta properly using CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@magenta/music@1.23.1/dist/magentamusic.min.js"></script>
+    
+    <!-- Define mm as a global variable -->
+    <script>
+        // Ensure mm is available globally
+        window.mm = mm;
+    </script>
+    
+    <style>
+        body {
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .melody-container {
+            margin-top: 30px;
+            padding: 20px;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .note-button {
+            margin: 5px;
+            width: 40px;
+        }
+        .preset-seed {
+            margin: 5px;
+            cursor: pointer;
+            padding: 5px 10px;
+            background-color: #e9ecef;
+            border-radius: 5px;
+            display: inline-block;
+        }
+        .preset-seed:hover {
+            background-color: #dee2e6;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-center mb-4">AI Melody Generator</h1>
+        
+        <div class="row">
+            <div class="col-md-8 offset-md-2 melody-container">
+                <h3>Enter Seed Melody</h3>
+                <p class="text-muted">Format: note numbers separated by spaces. Use "_" for holding a note and "r" for rest.</p>
+                
+                <div class="mb-3">
+                    <label for="seedInput" class="form-label">Seed Melody:</label>
+                    <input type="text" class="form-control" id="seedInput" 
+                           value="60 _ 64 _ 67 _ 72 _ 67 _ 64 _ 60 _ _ _">
+                </div>
+                
+                <h5>Preset Seeds:</h5>
+                <div class="preset-seeds mb-3">
+                    <div class="preset-seed" data-seed="60 _ 64 _ 67 _ 72 _ 67 _ 64 _ 60 _ _ _">C Major Arpeggio</div>
+                    <div class="preset-seed" data-seed="60 _ 62 _ 64 _ 65 _ 67 _ 69 _ 71 _ 72 _">C Major Scale</div>
+                    <div class="preset-seed" data-seed="72 _ 71 _ 69 _ 67 _ 65 _ 64 _ 62 _ 60 _">Descending Scale</div>
+                    <div class="preset-seed" data-seed="60 _ _ r 62 _ r 64 _ _ r 65 _ _ _ _">Rhythmic Pattern</div>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="stepsInput" class="form-label">Number of Steps:</label>
+                    <input type="number" class="form-control" id="stepsInput" value="200" min="50" max="1000">
+                </div>
+                
+                <div class="mb-3">
+                    <label for="temperatureInput" class="form-label">Temperature (0.1-1.0):</label>
+                    <input type="range" class="form-range" id="temperatureInput" min="0.1" max="1.0" step="0.1" value="0.3">
+                    <span id="temperatureValue">0.3</span>
+                </div>
+                
+                <div class="d-flex justify-content-between mb-4">
+                    <button class="btn btn-secondary" id="playSeedBtn">Play Seed</button>
+                    <button class="btn btn-primary" id="generateBtn">Generate Melody</button>
+                </div>
+                
+                <div id="playerContainer" class="mt-4" style="display: none;">
+                    <h3>Generated Melody</h3>
+                    <div class="d-flex justify-content-center mb-3">
+                        <button class="btn btn-success me-2" id="playGeneratedBtn">Play</button>
+                        <button class="btn btn-danger me-2" id="stopBtn">Stop</button>
+                        <a id="downloadBtn" href="#" class="btn btn-info" download>Download MIDI</a>
+                    </div>
+                    <div id="midiPlayer" class="mt-3"></div>
+                </div>
+                
+                <div id="loadingSpinner" class="text-center mt-4" style="display: none;">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p>Generating melody...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+    // Check if Magenta is loaded properly
+    console.log("Magenta loaded:", typeof mm !== 'undefined');
+    
+    // If Magenta isn't defined, show an error message
+    if (typeof mm === 'undefined') {
+        alert("Error: Magenta.js library failed to load. Please check your internet connection and refresh the page.");
+    }
+    
+    // Initialize Magenta player
+    let player = null;
+    let visualizer = null;
+    
+    // Initialize on page load
+    $(document).ready(function() {
+        try {
+            visualizer = new mm.PianoRollCanvasVisualizer();
+            console.log("Visualizer initialized");
+        } catch(e) {
+            console.error("Error initializing visualizer:", e);
+        }
+    });
+    
+    // Temperature slider
+    $('#temperatureInput').on('input', function() {
+        $('#temperatureValue').text($(this).val());
+    });
+    
+    // Preset seeds
+    $('.preset-seed').click(function() {
+        $('#seedInput').val($(this).data('seed'));
+    });
+    
+    // Play seed melody
+    $('#playSeedBtn').click(function() {
+        const seed = $('#seedInput').val();
+        
+        if (!seed || seed.trim() === '') {
+            alert('Please enter a seed melody first');
+            return;
+        }
+        
+        $('#playSeedBtn').prop('disabled', true).text('Loading...');
+        
+        fetch('/play_seed', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ seed: seed }),
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                console.log("Playing seed MIDI:", data.midi_file);
+                playMIDIFile(data.midi_file, true);
+            } else {
+                alert('Error: ' + (data.error || 'Unknown error'));
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error playing seed melody: ' + error);
+        })
+        .finally(() => {
+            $('#playSeedBtn').prop('disabled', false).text('Play Seed');
+        });
+    });
+    
+    // Generate melody
+    $('#generateBtn').click(function() {
+        const seed = $('#seedInput').val();
+        const steps = $('#stepsInput').val();
+        const temperature = $('#temperatureInput').val();
+        
+        if (!seed || seed.trim() === '') {
+            alert('Please enter a seed melody first');
+            return;
+        }
+        
+        $('#generateBtn').prop('disabled', true);
+        $('#loadingSpinner').show();
+        
+        console.log("Generating melody with:", { seed, steps, temperature });
+        
+        fetch('/generate', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ 
+                seed: seed,
+                steps: steps,
+                temperature: temperature 
+            }),
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                console.log("Generated melody:", data.melody);
+                console.log("MIDI file:", data.midi_file);
+                $('#playerContainer').show();
+                loadMIDIFile(data.midi_file);
+            } else {
+                alert('Error: ' + (data.error || 'Unknown error'));
+            }
+        })
+        .catch(error => {
+            console.error('Generation error:', error);
+            alert('Error generating melody: ' + error);
+        })
+        .finally(() => {
+            $('#generateBtn').prop('disabled', false);
+            $('#loadingSpinner').hide();
+        });
+    });
+    
+    // Play generated melody
+    $('#playGeneratedBtn').click(function() {
+        if (player && player.sequence) {
+            player.start(player.sequence);
+            $('#playGeneratedBtn').prop('disabled', true);
+            $('#stopBtn').prop('disabled', false);
+        } else {
+            console.error("Player not initialized or no sequence available");
+        }
+    });
+    
+    // Stop playback
+    $('#stopBtn').click(function() {
+        if (player) {
+            player.stop();
+            $('#playGeneratedBtn').prop('disabled', false);
+            $('#stopBtn').prop('disabled', true);
+        }
+    });
+    
+    // Update the download link when a new melody is generated
+    function updateDownloadLink(midiFile) {
+        const downloadBtn = document.getElementById('downloadBtn');
+        downloadBtn.href = midiFile;
+        downloadBtn.download = midiFile.split('/').pop();
+    }
+
+    // Load MIDI file for visualization
+    function loadMIDIFile(midiFile) {
+        console.log("Loading MIDI file:", midiFile);
+        
+        // Update download link
+        updateDownloadLink(midiFile);
+        
+        // Add timestamp to prevent caching
+        const url = `${midiFile}?t=${new Date().getTime()}`;
+        
+        fetch(url)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch MIDI file: ${response.status} ${response.statusText}`);
+                }
+                return response.arrayBuffer();
+            })
+            .then(buffer => {
+                console.log("MIDI buffer loaded, size:", buffer.byteLength);
+                try {
+                    const midi = mm.midiToSequenceProto(new Uint8Array(buffer));
+                    const sequence = mm.sequences.quantizeNoteSequence(midi, 4);
+                    
+                    console.log("MIDI sequence created:", sequence);
+                    
+                    // Create player with callbacks for visualization
+                    player = new mm.Player(false, {
+                        run: (note) => { 
+                            if (visualizer) visualizer.redraw(note, true) 
+                        },
+                        stop: () => {
+                            $('#playGeneratedBtn').prop('disabled', false);
+                            $('#stopBtn').prop('disabled', true);
+                        }
+                    });
+                    
+                    // Store the sequence for later playback
+                    player.sequence = sequence;
+                    
+                    // Set up visualizer
+                    const container = document.getElementById('midiPlayer');
+                    container.innerHTML = '';
+                    const canvas = document.createElement('canvas');
+                    canvas.width = container.clientWidth;
+                    canvas.height = 200;
+                    container.appendChild(canvas);
+                    
+                    if (visualizer) {
+                        visualizer.attachToCanvas(canvas);
+                        visualizer.getNoteSequence = () => sequence;
+                        visualizer.redraw();
+                    }
+                    
+                    // Enable play button
+                    $('#playGeneratedBtn').prop('disabled', false);
+                } catch (e) {
+                    console.error("Error processing MIDI data:", e);
+                    alert("Error processing MIDI file: " + e.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error loading MIDI file:', error);
+                alert('Error loading MIDI file: ' + error);
+            });
+    }
+    
+    // Fallback method to play MIDI files using HTML5 audio if Magenta fails
+    function playMIDIFallback(midiFile) {
+        const audio = new Audio(midiFile);
+        audio.play().catch(e => {
+            console.error("Error playing audio:", e);
+            alert("Your browser might not support MIDI playback. Try downloading the file instead.");
+        });
+    }
+
+    // Modified playMIDIFile function with fallback
+    function playMIDIFile(midiFile, autoplay = true) {
+        console.log("Playing MIDI file:", midiFile, "autoplay:", autoplay);
+        
+        if (typeof mm === 'undefined') {
+            console.warn("Magenta not available, using fallback player");
+            playMIDIFallback(midiFile);
+            return;
+        }
+        
+        // Add timestamp to prevent caching
+        const url = `${midiFile}?t=${new Date().getTime()}`;
+        
+        fetch(url)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch MIDI file: ${response.status} ${response.statusText}`);
+                }
+                return response.arrayBuffer();
+            })
+            .then(buffer => {
+                console.log("MIDI buffer loaded for playback, size:", buffer.byteLength);
+                try {
+                    const midi = mm.midiToSequenceProto(new Uint8Array(buffer));
+                    const sequence = mm.sequences.quantizeNoteSequence(midi, 4);
+                    
+                    console.log("Creating player...");
+                    
+                    // Just use the standard Player without visualization for seed playback
+                    const tempPlayer = new mm.Player();
+                    
+                    console.log("Player created, loading soundfont...");
+                    
+                    // Now try to play the sequence directly
+                    if (autoplay) {
+                        tempPlayer.start(sequence).then(() => {
+                            console.log("Seed playback complete");
+                        }).catch(err => {
+                            console.error("Error during playback:", err);
+                            playMIDIFallback(midiFile);
+                        });
+                    }
+                } catch (e) {
+                    console.error("Error processing MIDI data for playback:", e);
+                    alert("Error playing MIDI file: " + e.message);
+                    // Try fallback if Magenta player fails
+                    playMIDIFallback(midiFile);
+                }
+            })
+            .catch(error => {
+                console.error('Error playing MIDI file:', error);
+                alert('Error playing MIDI file: ' + error);
+                // Try fallback on network error
+                playMIDIFallback(midiFile);
+            });
+    }
+</script>
+</body>
+</html>
