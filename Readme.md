@@ -13,7 +13,7 @@ pip install -r requirements.txt
 
 ## Usage
 
-### Step 1: Preprocessing Data
+### Step 1: Preprocessing Data (Optional - Already done by me)
 Run the following command to preprocess the dataset:
 ```sh
 python preprocess.py
@@ -33,6 +33,13 @@ Use the trained model to generate melodies:
 python melody_generator.py
 ```
 The melody will be generated using a predefined seed embedded in the code.
+
+### Web UI: Generating Melody
+Use the index.html page to generate melody in a more easy way:
+```sh
+python app.py
+```
+Open the localhost website appearing in the terminal
 
 ## Notes
 - You can either use the provided `model.h5` or generate your own by training.
